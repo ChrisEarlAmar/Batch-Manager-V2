@@ -1,19 +1,23 @@
 {
   "name": "batch-manager-v2",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
+  "main": "src/main/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "generate:icon": "node scripts/generate-icon.cjs",
+    "electron:dev": "concurrently -k -n VITE,ELECTRON -c blue,magenta \"vite\" \"wait-on tcp:5327 && electron .\"",
+    "electron:build": "npm run build && electron-builder",
+    "electron:pack": "npm run build && electron-builder --dir"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-web-links": "^0.12.0",
     "@xterm/xterm": "^6.0.0",
-    "electron": "^43.2.0",
     "node-pty": "^1.1.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
@@ -27,6 +31,7 @@
     "@vitejs/plugin-react": "^6.0.3",
     "concurrently": "^10.0.3",
     "cross-env": "^10.1.0",
+    "electron": "^43.2.0",
     "electron-builder": "^26.15.3",
     "eslint": "^10.6.0",
     "eslint-plugin-react-hooks": "^7.1.1",
@@ -36,5 +41,31 @@
     "typescript-eslint": "^8.62.0",
     "vite": "^8.1.1",
     "wait-on": "^9.1.0"
+  },
+  "build": {
+    "appId": "com.citihardware.processmanager",
+    "productName": "Process Manager",
+    "files": [
+      "dist/**/*",
+      "src/main/**/*",
+      "src/preload/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/node_modules/node-pty/**"
+    ],
+    "directories": {
+      "buildResources": "build",
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
   }
 }
