@@ -1,5 +1,6 @@
 'use strict';
 
+const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const { app, BrowserWindow, Tray, Menu, nativeImage, dialog, shell } = require('electron');
@@ -10,6 +11,21 @@ const logger = require('./logger.cjs');
 const ipc = require('./ipc.cjs');
 const { checkIsAdmin } = require('./adminCheck.cjs');
 
+// Only one instance may run at a time — a second launch just focuses the
+// existing window instead of spinning up a second app managing the same
+// (or conflicting) processes.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+  return;
+}
+
+app.on('second-instance', () => {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  if (!mainWindow.isVisible()) mainWindow.show();
+  mainWindow.focus();
+});
+
 const isDev = !app.isPackaged;
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5327';
 
@@ -18,14 +34,39 @@ const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5327
 if (isDev) {
   app.commandLine.appendSwitch('remote-debugging-port', '9223');
 }
-const ICON_PNG = path.join(__dirname, '..', '..', 'public', 'app-icon.png');
-const ICON_ICO = path.join(__dirname, '..', '..', 'build', 'icon.ico');
+// public/ is copied into dist/ by `vite build` but isn't itself part of the
+// packaged app (see electron-builder's "files" list in package.json) — only
+// dist/ ships in a packaged build, only public/ exists in dev.
+const ICON_PNG = isDev
+  ? path.join(__dirname, '..', '..', 'public', 'app-icon.png')
+  : path.join(__dirname, '..', '..', 'dist', 'app-icon.png');
 const WATCHDOG_SCRIPT = path.join(__dirname, 'watchdog.cjs');
 
 let mainWindow = null;
 let tray = null;
 let isAdmin = false;
 let quitting = false;
+let appIcon = null;
+
+// frame:false means Windows never draws a native titlebar for this window,
+// so the BrowserWindow `icon` option's only visible effect is the taskbar
+// button and Alt+Tab — there's no "titlebar icon" separate from that to fall
+// back to. A .ico that nativeImage fails to parse fails *silently* (empty
+// image, no throw), which is exactly what makes a bad icon path invisible
+// until you look at the taskbar. PNG avoids ICO-parsing edge cases entirely;
+// the .ico file is still used for the packaged .exe's own resources via
+// electron-builder's win.icon config.
+function loadAppIcon() {
+  if (!fs.existsSync(ICON_PNG)) {
+    console.error('[main] app icon not found at', ICON_PNG);
+    return nativeImage.createEmpty();
+  }
+  const image = nativeImage.createFromPath(ICON_PNG);
+  if (image.isEmpty()) {
+    console.error('[main] app icon failed to decode from', ICON_PNG);
+  }
+  return image;
+}
 
 function getMainWindow() {
   return mainWindow;
@@ -61,9 +102,9 @@ function createWindow() {
     minWidth: 980,
     minHeight: 600,
     show: false,
-    backgroundColor: '#0c0e14',
+    backgroundColor: '#0a0908',
     frame: false,
-    icon: nativeImage.createFromPath(process.platform === 'win32' ? ICON_ICO : ICON_PNG),
+    icon: appIcon,
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload', 'api.cjs'),
       contextIsolation: true,
@@ -139,7 +180,7 @@ async function confirmAndQuit() {
 }
 
 function createTray() {
-  const trayIcon = nativeImage.createFromPath(ICON_PNG).resize({ width: 32, height: 32 });
+  const trayIcon = appIcon.resize({ width: 32, height: 32 });
   tray = new Tray(trayIcon);
   tray.setToolTip('Process Manager');
 
@@ -196,6 +237,7 @@ app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
 
   isAdmin = checkIsAdmin();
+  appIcon = loadAppIcon();
 
   configManager.init();
   const pidFilePath = path.join(configManager.paths().userDataDir, 'running-pids.json');

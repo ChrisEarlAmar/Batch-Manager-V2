@@ -7,7 +7,7 @@ const path = require('path');
 const pty = require('node-pty');
 const { execFile } = require('child_process');
 
-const SCROLLBACK_CAP_BYTES = 512 * 1024; // ~512KB per process, plenty for a dev console
+const SCROLLBACK_CAP_BYTES = 256 * 1024; // ~256KB per process, plenty for a dev console
 const GRACEFUL_STOP_TIMEOUT_MS = 4000;
 
 const sessions = new Map(); // id -> { pty, scrollback, cols, rows, stopTimer }

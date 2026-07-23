@@ -23,7 +23,11 @@ function defaultConfig() {
     profiles: [],
     stats: {},
     settings: {
-      minimizeToTray: true,
+      // Off by default: closing the window should actually quit the app
+      // (and stop everything it's managing), not silently keep running.
+      // Power users who want a background-tray app can still flip this
+      // via settings:update.
+      minimizeToTray: false,
       startMinimized: false,
       launchOnStartup: false,
     },
@@ -44,13 +48,20 @@ function init() {
 
   if (fs.existsSync(configFile)) {
     try {
-      const raw = fs.readFileSync(configFile, 'utf8');
+      const raw = fs.readFileSync(configFile, 'utf8').replace(/^﻿/, '');
       const parsed = JSON.parse(raw);
       state = { ...defaultConfig(), ...parsed };
       state.processes = Array.isArray(parsed.processes) ? parsed.processes : [];
       state.profiles = Array.isArray(parsed.profiles) ? parsed.profiles : [];
       state.stats = parsed.stats && typeof parsed.stats === 'object' ? parsed.stats : {};
       state.settings = { ...defaultConfig().settings, ...(parsed.settings || {}) };
+
+      // Guard against orphaned stats entries piling up forever (e.g. a
+      // process removed by an older build that didn't clean up properly).
+      const liveIds = new Set(state.processes.map((p) => p.id));
+      for (const id of Object.keys(state.stats)) {
+        if (!liveIds.has(id)) delete state.stats[id];
+      }
     } catch (err) {
       console.error('[configManager] failed to parse config.json, backing up and resetting', err);
       try {
