@@ -1,14 +1,25 @@
-import type { CSSProperties } from 'react'
-import type { ProcessItem } from '../types'
+import { Play, Square, RotateCcw, Terminal, Trash2, Pencil } from 'lucide-react'
+import type { ProcessItem, ProcessStatus } from '../types'
 import { formatTotalRuntime, useUptime } from '../hooks/useUptime'
-import { IconPlay, IconStop, IconRestart, IconTerminal, IconTrash, IconEdit } from './icons'
+import { Card } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 
-const STATUS_LABEL: Record<ProcessItem['status'], string> = {
+const STATUS_LABEL: Record<ProcessStatus, string> = {
   running: 'Running',
   starting: 'Starting',
   stopping: 'Stopping',
   stopped: 'Stopped',
   crashed: 'Crashed',
+}
+
+const STATUS_DOT: Record<ProcessStatus, string> = {
+  running: 'bg-status-running',
+  starting: 'bg-status-starting animate-pulse',
+  stopping: 'bg-status-stopping animate-pulse',
+  stopped: 'bg-status-stopped',
+  crashed: 'bg-status-crashed',
 }
 
 export function ProcessCard({
@@ -35,65 +46,88 @@ export function ProcessCard({
   const busy = proc.status === 'starting' || proc.status === 'stopping'
   const canStart = proc.status === 'stopped' || proc.status === 'crashed'
 
-  const style = proc.color ? ({ '--accent-swatch': proc.color } as CSSProperties) : undefined
-
   return (
-    <div
-      className={`process-card${selected ? ' selected' : ''}`}
-      style={style}
+    <Card
       onClick={onOpen}
       role="button"
       tabIndex={0}
+      className={cn(
+        'group cursor-pointer gap-0 border-l-4 py-3 transition-colors hover:bg-accent/60',
+        selected && 'bg-accent/50 ring-1 ring-primary/40',
+      )}
+      style={{ borderLeftColor: proc.color ?? 'var(--border)' }}
     >
-      <div className="process-card-top">
-        <div style={{ minWidth: 0 }}>
-          <div className="process-name">{proc.name}</div>
-          <div className="process-script">{proc.script}</div>
+      <div className="flex items-start justify-between gap-2 px-4">
+        <div className="min-w-0">
+          <div className="truncate text-[13px] font-semibold">{proc.name}</div>
+          <div className="truncate font-mono text-[10.5px] text-muted-foreground">{proc.script}</div>
         </div>
-        <span className={`status-pill status-${proc.status}`}>
-          <span className="status-dot" />
+        <Badge variant={proc.status} className="shrink-0">
+          <span className={cn('size-1.5 rounded-full', STATUS_DOT[proc.status])} />
           {STATUS_LABEL[proc.status]}
-        </span>
+        </Badge>
       </div>
 
-      <div className="process-card-meta">
+      <div className="mt-2.5 flex items-center gap-2 px-4 font-mono text-[11px] text-muted-foreground">
         <span>PID {proc.pid ?? '—'}</span>
-        <span className="divider">·</span>
+        <span className="text-border">·</span>
         <span>Up {uptime ?? '00:00:00'}</span>
-        <span className="divider">·</span>
+        <span className="text-border">·</span>
         <span title="Total accumulated runtime">Total {formatTotalRuntime(proc.totalRuntimeMs)}</span>
       </div>
 
-      <div className="process-card-flags">
-        {proc.autoStart && <span className="flag-chip on">Auto-start</span>}
-        {proc.restartOnCrash && <span className="flag-chip on">Auto-restart</span>}
-        {proc.autoRestartSuppressed && <span className="flag-chip warn">Restart disabled</span>}
-        {proc.crashCount > 0 && <span className="flag-chip">{proc.crashCount} crash{proc.crashCount === 1 ? '' : 'es'}</span>}
-      </div>
+      {(proc.autoStart || proc.restartOnCrash || proc.autoRestartSuppressed || proc.crashCount > 0) && (
+        <div className="mt-2 flex flex-wrap gap-1 px-4">
+          {proc.autoStart && (
+            <Badge variant="outline" className="text-primary border-primary/30 bg-primary/10 normal-case">
+              Auto-start
+            </Badge>
+          )}
+          {proc.restartOnCrash && (
+            <Badge variant="outline" className="text-primary border-primary/30 bg-primary/10 normal-case">
+              Auto-restart
+            </Badge>
+          )}
+          {proc.autoRestartSuppressed && (
+            <Badge variant="destructive" className="normal-case">
+              Restart disabled
+            </Badge>
+          )}
+          {proc.crashCount > 0 && (
+            <Badge variant="outline" className="normal-case">
+              {proc.crashCount} crash{proc.crashCount === 1 ? '' : 'es'}
+            </Badge>
+          )}
+        </div>
+      )}
 
-      <div className="process-card-actions" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="mt-3 flex gap-1.5 px-4 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 has-[:focus-visible]:opacity-100 data-[selected=true]:opacity-100"
+        data-selected={selected}
+        onClick={(e) => e.stopPropagation()}
+      >
         {canStart ? (
-          <button className="card-action-btn primary" onClick={onStart} title="Start">
-            <IconPlay /> Start
-          </button>
+          <Button size="sm" variant="secondary" className="flex-1 text-status-running hover:text-status-running" onClick={onStart}>
+            <Play /> Start
+          </Button>
         ) : (
-          <button className="card-action-btn stop" onClick={onStop} disabled={busy} title="Stop">
-            <IconStop /> Stop
-          </button>
+          <Button size="sm" variant="secondary" className="flex-1 hover:text-status-crashed" onClick={onStop} disabled={busy}>
+            <Square /> Stop
+          </Button>
         )}
-        <button className="card-action-btn" onClick={onRestart} disabled={proc.status === 'stopped'} title="Restart">
-          <IconRestart />
-        </button>
-        <button className="card-action-btn" onClick={onOpen} title="Open terminal">
-          <IconTerminal />
-        </button>
-        <button className="card-action-btn" onClick={onEdit} title="Edit">
-          <IconEdit />
-        </button>
-        <button className="card-action-btn danger" onClick={onRemove} title="Remove">
-          <IconTrash />
-        </button>
+        <Button size="icon-sm" variant="secondary" onClick={onRestart} disabled={proc.status === 'stopped'} title="Restart">
+          <RotateCcw />
+        </Button>
+        <Button size="icon-sm" variant="secondary" onClick={onOpen} title="Open terminal">
+          <Terminal />
+        </Button>
+        <Button size="icon-sm" variant="secondary" onClick={onEdit} title="Edit">
+          <Pencil />
+        </Button>
+        <Button size="icon-sm" variant="secondary" className="hover:bg-destructive/15 hover:text-destructive" onClick={onRemove} title="Remove">
+          <Trash2 />
+        </Button>
       </div>
-    </div>
+    </Card>
   )
 }

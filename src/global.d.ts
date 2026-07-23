@@ -32,6 +32,7 @@ declare global {
 
       pickBatchFile: () => Promise<string | null>
       pickDirectory: (defaultPath?: string) => Promise<string | null>
+      getPathForFile: (file: File) => string
 
       minimizeWindow: () => void
       toggleMaximizeWindow: () => void

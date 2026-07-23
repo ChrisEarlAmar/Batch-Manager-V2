@@ -1,3 +1,6 @@
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+
 export function ConfirmDialog({
   open,
   title,
@@ -15,21 +18,22 @@ export function ConfirmDialog({
   onConfirm: () => void
   onCancel: () => void
 }) {
-  if (!open) return null
   return (
-    <div className="modal-overlay" onClick={onCancel}>
-      <div className="confirm-dialog" onClick={(e) => e.stopPropagation()}>
-        <h3>{title}</h3>
-        <p>{message}</p>
-        <div className="confirm-dialog-actions">
-          <button className="btn" onClick={onCancel}>
+    <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
+      <DialogContent className="p-0 sm:max-w-[380px]" showCloseButton={false}>
+        <DialogHeader className="border-b-0 pb-0">
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{message}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="border-t-0 pt-2">
+          <Button variant="outline" onClick={onCancel}>
             Cancel
-          </button>
-          <button className={`btn ${danger ? 'danger' : 'primary'}`} onClick={onConfirm}>
+          </Button>
+          <Button variant={danger ? 'destructive' : 'default'} onClick={onConfirm}>
             {confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

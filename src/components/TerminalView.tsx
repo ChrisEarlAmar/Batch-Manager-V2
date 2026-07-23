@@ -3,33 +3,34 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
-import { IconLog } from './icons'
+import { ScrollText } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
 const XTERM_THEME = {
-  background: '#0b0d13',
-  foreground: '#e9ebf2',
-  cursor: '#8b6bff',
-  cursorAccent: '#0b0d13',
-  selectionBackground: 'rgba(139, 107, 255, 0.35)',
-  black: '#12141c',
-  red: '#f87171',
-  green: '#34d399',
-  yellow: '#fbbf24',
+  background: '#0a0908',
+  foreground: '#f3efec',
+  cursor: '#ff5f36',
+  cursorAccent: '#0a0908',
+  selectionBackground: 'rgba(255, 95, 54, 0.35)',
+  black: '#151210',
+  red: '#ef4444',
+  green: '#22c55e',
+  yellow: '#f5a524',
   blue: '#60a5fa',
-  magenta: '#c084fc',
-  cyan: '#5eebd8',
-  white: '#c9cddb',
-  brightBlack: '#5b6272',
+  magenta: '#e879a6',
+  cyan: '#ff9f5c',
+  white: '#cdc7c2',
+  brightBlack: '#5f574f',
   brightRed: '#fca5a5',
   brightGreen: '#6ee7b7',
   brightYellow: '#fcd34d',
   brightBlue: '#93c5fd',
-  brightMagenta: '#d8b4fe',
-  brightCyan: '#a5f3ec',
-  brightWhite: '#f4f5f8',
+  brightMagenta: '#f0a8c8',
+  brightCyan: '#ffbf8a',
+  brightWhite: '#fdfbfa',
 }
 
-export function TerminalView({ id, active }: { id: string; active: boolean }) {
+export function TerminalView({ id }: { id: string }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
@@ -42,7 +43,10 @@ export function TerminalView({ id, active }: { id: string; active: boolean }) {
       fontSize: 13,
       lineHeight: 1.3,
       cursorBlink: true,
-      scrollback: 8000,
+      // Only the active tab is ever mounted (see App.tsx), so this is the
+      // one xterm buffer resident in memory at a time — a few thousand
+      // lines is plenty without letting a chatty process bloat RAM.
+      scrollback: 3000,
       theme: XTERM_THEME,
       allowTransparency: false,
     })
@@ -97,14 +101,14 @@ export function TerminalView({ id, active }: { id: string; active: boolean }) {
   }, [id])
 
   return (
-    <div className={`terminal-view${active ? '' : ' hidden'}`}>
-      <div className="terminal-toolbar">
-        <button className="icon-btn" title="Clear view" onClick={() => termRef.current?.clear()}>
-          Clr
-        </button>
-        <button className="icon-btn" title="Open log file" onClick={() => window.api.openLogFile(id)}>
-          <IconLog />
-        </button>
+    <div className="terminal-view">
+      <div className="absolute top-2 right-3.5 z-10 flex gap-1.5">
+        <Button size="sm" variant="secondary" title="Clear view" onClick={() => termRef.current?.clear()}>
+          Clear
+        </Button>
+        <Button size="icon-sm" variant="secondary" title="Open log file" onClick={() => window.api.openLogFile(id)}>
+          <ScrollText />
+        </Button>
       </div>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
     </div>

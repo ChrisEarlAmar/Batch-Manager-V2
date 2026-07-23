@@ -1,12 +1,13 @@
+import { X } from 'lucide-react'
 import type { ProcessItem, ProcessStatus } from '../types'
-import { IconClose } from './icons'
+import { cn } from '@/lib/utils'
 
 const DOT_COLOR: Record<ProcessStatus, string> = {
-  running: 'var(--status-running)',
-  starting: 'var(--status-starting)',
-  stopping: 'var(--status-stopping)',
-  stopped: 'var(--status-stopped)',
-  crashed: 'var(--status-crashed)',
+  running: 'bg-status-running',
+  starting: 'bg-status-starting',
+  stopping: 'bg-status-stopping',
+  stopped: 'bg-status-stopped',
+  crashed: 'bg-status-crashed',
 }
 
 export function TerminalTabs({
@@ -23,23 +24,31 @@ export function TerminalTabs({
   onClose: (id: string) => void
 }) {
   return (
-    <div className="tab-strip">
+    <div className="flex flex-1 items-stretch overflow-x-auto overflow-y-hidden">
       {openIds.map((id) => {
         const proc = processes.find((p) => p.id === id)
         if (!proc) return null
+        const active = activeId === id
         return (
-          <div key={id} className={`tab${activeId === id ? ' active' : ''}`} onClick={() => onSelect(id)}>
-            <span className="status-dot" style={{ background: DOT_COLOR[proc.status] }} />
-            <span className="tab-name">{proc.name}</span>
+          <div
+            key={id}
+            onClick={() => onSelect(id)}
+            className={cn(
+              'relative flex max-w-[200px] cursor-pointer items-center gap-2 border-r border-border px-3 text-xs whitespace-nowrap text-muted-foreground',
+              active && 'bg-background text-foreground after:absolute after:inset-x-0 after:top-0 after:h-0.5 after:bg-primary',
+            )}
+          >
+            <span className={cn('size-1.5 shrink-0 rounded-full', DOT_COLOR[proc.status])} />
+            <span className="truncate">{proc.name}</span>
             <span
-              className="tab-close"
               onClick={(e) => {
                 e.stopPropagation()
                 onClose(id)
               }}
               title="Close tab (process keeps running)"
+              className="flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-white/10 hover:text-foreground"
             >
-              <IconClose width={10} height={10} />
+              <X className="size-2.5" />
             </span>
           </div>
         )

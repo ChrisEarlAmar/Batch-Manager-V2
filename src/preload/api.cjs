@@ -2,7 +2,7 @@
 // on window.api instead of handing the renderer raw ipcRenderer access.
 'use strict';
 
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 function on(channel, callback) {
   const listener = (_event, ...args) => callback(...args);
@@ -38,6 +38,9 @@ contextBridge.exposeInMainWorld('api', {
 
   pickBatchFile: () => ipcRenderer.invoke('dialog:pick-batch-file'),
   pickDirectory: (defaultPath) => ipcRenderer.invoke('dialog:pick-directory', defaultPath),
+  // File.path was removed in modern Electron; webUtils.getPathForFile is the
+  // supported way to recover a real filesystem path from a drag-and-dropped File.
+  getPathForFile: (file) => webUtils.getPathForFile(file),
 
   minimizeWindow: () => ipcRenderer.send('window:minimize'),
   toggleMaximizeWindow: () => ipcRenderer.send('window:toggle-maximize'),
