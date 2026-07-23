@@ -10,6 +10,7 @@ const zlib = require('zlib');
 
 const OUT_DIR = path.join(__dirname, '..', 'build');
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+const SRC_ASSETS_DIR = path.join(__dirname, '..', 'src', 'assets');
 
 function clamp(v, lo, hi) {
   return v < lo ? lo : v > hi ? hi : v;
@@ -50,11 +51,11 @@ function renderIcon(size) {
   const hi = size * S;
   const buf = new Float64Array(hi * hi * 4);
 
-  const bgTop = [30, 33, 46]; // #1e212e
-  const bgBottom = [16, 18, 27]; // #10121b
-  const glowColor = [124, 92, 255]; // violet
-  const glyphTop = [96, 235, 255]; // cyan
-  const glyphBottom = [124, 92, 255]; // violet
+  const bgTop = [26, 22, 21]; // #1a1615
+  const bgBottom = [11, 9, 9]; // #0b0909
+  const glowColor = [255, 106, 61]; // coral glow
+  const glyphTop = [255, 165, 92]; // warm amber-orange
+  const glyphBottom = [255, 79, 54]; // coral-red
 
   const radius = hi * 0.22;
 
@@ -218,6 +219,7 @@ function buildIco(pngsBySize) {
 
 function main() {
   if (!fs.existsSync(OUT_DIR)) fs.mkdirSync(OUT_DIR, { recursive: true });
+  if (!fs.existsSync(SRC_ASSETS_DIR)) fs.mkdirSync(SRC_ASSETS_DIR, { recursive: true });
 
   const sizes = [16, 24, 32, 48, 64, 128, 256, 512];
   const pngs = {};
@@ -230,6 +232,9 @@ function main() {
   fs.writeFileSync(path.join(PUBLIC_DIR, 'app-icon.png'), pngs[256]);
   fs.writeFileSync(path.join(PUBLIC_DIR, 'app-icon-32.png'), pngs[32]);
   fs.writeFileSync(path.join(PUBLIC_DIR, 'app-icon-16.png'), pngs[16]);
+  // Imported as a module by TitleBar.tsx — public/ paths only resolve
+  // correctly under the dev server, not under file:// in a packaged build.
+  fs.writeFileSync(path.join(SRC_ASSETS_DIR, 'app-icon.png'), pngs[256]);
 
   const ico = buildIco({ 16: pngs[16], 32: pngs[32], 48: pngs[48], 256: pngs[256] });
   fs.writeFileSync(path.join(OUT_DIR, 'icon.ico'), ico);
