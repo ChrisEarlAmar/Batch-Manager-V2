@@ -1,5 +1,8 @@
 # Process Manager
 
+**[⬇ Download for Windows](https://github.com/ChrisEarlAmar/Batch-Manager-V2/releases/latest/download/ProcessManagerSetup.exe)**
+— always the latest build. ([All releases](https://github.com/ChrisEarlAmar/Batch-Manager-V2/releases))
+
 A Windows desktop app for starting, monitoring, and managing local development
 processes — Laravel queue workers, Reverb, the scheduler, Vite dev servers,
 or any other `.bat`/`.cmd` script — from one dashboard with real terminal
@@ -96,6 +99,22 @@ lands in `release/` (gitignored) as `Process Manager Setup <version>.exe`.
 > `win-unpacked.tmp`, that's antivirus locking the freshly-extracted Electron
 > executables, not a project problem — just retry, or ask IT to exclude the
 > project folder from real-time scanning if it keeps happening.
+
+`build-installer.bat` also publishes the installer to a
+[GitHub Release](https://github.com/ChrisEarlAmar/Batch-Manager-V2/releases)
+after a successful build, tagged from the version in `package.json` (e.g.
+`v0.1.0`) — that's what the download link at the top of this README always
+points to. This step needs the
+[GitHub CLI](https://cli.github.com/) installed and signed in
+(`gh auth login`, once); if it isn't, the script skips publishing and tells
+you how to do it manually, without failing the build itself.
+
+The installer is never committed into the repo — at 100MB+ it sits right at
+GitHub's per-file push limit, and would permanently grow the repo's history
+by a full copy on every rebuild. Release assets live outside git entirely and
+have no such limit, which is also why the download link uses a fixed
+`ProcessManagerSetup.exe` asset name instead of the versioned local filename
+— it never has to change between releases.
 
 ## Project structure
 
