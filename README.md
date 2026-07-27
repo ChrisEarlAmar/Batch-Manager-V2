@@ -100,14 +100,15 @@ lands in `release/` (gitignored) as `Process Manager Setup <version>.exe`.
 > executables, not a project problem — just retry, or ask IT to exclude the
 > project folder from real-time scanning if it keeps happening.
 
-`build-installer.bat` also publishes the installer to a
+`build-installer.bat` then calls `publish-release.bat`, which publishes the
+installer to a
 [GitHub Release](https://github.com/ChrisEarlAmar/Batch-Manager-V2/releases)
-after a successful build, tagged from the version in `package.json` (e.g.
-`v0.1.0`) — that's what the download link at the top of this README always
-points to. This step needs the
-[GitHub CLI](https://cli.github.com/) installed and signed in
-(`gh auth login`, once); if it isn't, the script skips publishing and tells
-you how to do it manually, without failing the build itself.
+tagged from the version in `package.json` (e.g. `v0.1.0`) — that's what the
+download link at the top of this README always points to. `publish-release.bat`
+can also be run on its own (e.g. to republish without rebuilding). Either way
+it needs the [GitHub CLI](https://cli.github.com/) installed and signed in
+(`gh auth login`, once); if it isn't, it skips publishing and tells you how to
+do it manually, without failing the build itself.
 
 The installer is never committed into the repo — at 100MB+ it sits right at
 GitHub's per-file push limit, and would permanently grow the repo's history
