@@ -78,6 +78,19 @@ function App() {
     window.api.listProfiles().then(setProfiles)
   }
 
+  async function handleRenameProfile(id: string, name: string) {
+    await window.api.updateProfile(id, { name })
+    refreshProfiles()
+  }
+
+  async function handleDeleteProfile(id: string) {
+    await window.api.removeProfile(id)
+    refreshProfiles()
+    // processes:changed already arrives separately to clear their profileId;
+    // this just stops filtering on a profile that no longer exists.
+    setActiveProfileId((cur) => (cur === id ? null : cur))
+  }
+
   function openAddProcess(script?: string) {
     setEditingProcess(null)
     setPendingScript(script ?? null)
@@ -162,6 +175,8 @@ function App() {
           selectedId={activeTabId}
           onChangeProfile={setActiveProfileId}
           onAddProfile={handleAddProfile}
+          onRenameProfile={handleRenameProfile}
+          onDeleteProfile={handleDeleteProfile}
           onOpenAddProcess={() => openAddProcess()}
           onOpenTerminal={openTerminal}
           onStart={(id) => window.api.startProcess(id)}

@@ -1,10 +1,23 @@
 import { useState } from 'react'
-import { Play, Square, Plus, Layers } from 'lucide-react'
+import { Play, Square, Plus, Layers, Pencil, Trash2 } from 'lucide-react'
 import type { ProcessItem, Profile } from '../types'
 import { ProcessCard } from './ProcessCard'
+import { RenameProfileDialog } from './RenameProfileDialog'
+import { ConfirmDialog } from './ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem } from '@/components/ui/context-menu'
 import { cn } from '@/lib/utils'
+
+// Radix's ContextMenu and Dialog each independently lock/restore
+// `document.body.style.pointerEvents` while open. Opening a Dialog directly
+// from a ContextMenuItem's onSelect races the two: the Dialog mounts while
+// the menu is still mid-close, captures "pointer-events: none" as its
+// baseline to restore to, and leaves the whole page unclickable once it
+// closes. Deferring to the next tick lets the menu fully unmount first.
+function openAfterMenuCloses(fn: () => void) {
+  setTimeout(fn, 0)
+}
 
 export function Sidebar({
   processes,
@@ -13,6 +26,8 @@ export function Sidebar({
   selectedId,
   onChangeProfile,
   onAddProfile,
+  onRenameProfile,
+  onDeleteProfile,
   onOpenAddProcess,
   onOpenTerminal,
   onStart,
@@ -29,6 +44,8 @@ export function Sidebar({
   selectedId: string | null
   onChangeProfile: (id: string | null) => void
   onAddProfile: (name: string) => void
+  onRenameProfile: (id: string, name: string) => Promise<void>
+  onDeleteProfile: (id: string) => Promise<void>
   onOpenAddProcess: () => void
   onOpenTerminal: (id: string) => void
   onStart: (id: string) => void
@@ -41,6 +58,8 @@ export function Sidebar({
 }) {
   const [addingProfile, setAddingProfile] = useState(false)
   const [profileName, setProfileName] = useState('')
+  const [renameTarget, setRenameTarget] = useState<Profile | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Profile | null>(null)
 
   const visible = processes.filter((p) => !activeProfileId || p.profileId === activeProfileId)
   const runningCount = processes.filter((p) => p.status === 'running').length
@@ -52,22 +71,18 @@ export function Sidebar({
     setAddingProfile(false)
   }
 
-  function chip(label: string, active: boolean, onClick: () => void, key?: string) {
-    return (
-      <button
-        key={key ?? label}
-        onClick={onClick}
-        className={cn(
-          'rounded-full border px-2.5 py-1 text-xs font-medium whitespace-nowrap transition-colors',
-          active
-            ? 'border-primary/45 bg-primary/12 text-foreground'
-            : 'border-border bg-card text-muted-foreground hover:border-input hover:text-foreground',
-        )}
-      >
-        {label}
-      </button>
+  const chipClass = (active: boolean) =>
+    cn(
+      'rounded-full border px-2.5 py-1 text-xs font-medium whitespace-nowrap transition-colors',
+      active
+        ? 'border-primary/45 bg-primary/12 text-foreground'
+        : 'border-border bg-card text-muted-foreground hover:border-input hover:text-foreground',
     )
-  }
+
+  const assignedCount = deleteTarget ? processes.filter((p) => p.profileId === deleteTarget.id).length : 0
+  const runningAssignedCount = deleteTarget
+    ? processes.filter((p) => p.profileId === deleteTarget.id && (p.status === 'running' || p.status === 'starting')).length
+    : 0
 
   return (
     <aside className="flex w-80 shrink-0 flex-col border-r border-border bg-card">
@@ -80,8 +95,28 @@ export function Sidebar({
         </div>
 
         <div className="flex flex-wrap gap-1.5">
-          {chip('All', activeProfileId === null, () => onChangeProfile(null))}
-          {profiles.map((p) => chip(p.name, activeProfileId === p.id, () => onChangeProfile(p.id), p.id))}
+          <button onClick={() => onChangeProfile(null)} className={chipClass(activeProfileId === null)}>
+            All
+          </button>
+
+          {profiles.map((p) => (
+            <ContextMenu key={p.id}>
+              <ContextMenuTrigger asChild>
+                <button onClick={() => onChangeProfile(p.id)} className={chipClass(activeProfileId === p.id)}>
+                  {p.name}
+                </button>
+              </ContextMenuTrigger>
+              <ContextMenuContent>
+                <ContextMenuItem onSelect={() => openAfterMenuCloses(() => setRenameTarget(p))}>
+                  <Pencil /> Rename
+                </ContextMenuItem>
+                <ContextMenuItem variant="destructive" onSelect={() => openAfterMenuCloses(() => setDeleteTarget(p))}>
+                  <Trash2 /> Delete
+                </ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
+          ))}
+
           {addingProfile ? (
             <Input
               autoFocus
@@ -147,6 +182,28 @@ export function Sidebar({
         </span>
         <span>{runningCount} running</span>
       </div>
+
+      {renameTarget && (
+        <RenameProfileDialog profile={renameTarget} onClose={() => setRenameTarget(null)} onSubmit={onRenameProfile} />
+      )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Delete profile"
+        message={
+          assignedCount === 0
+            ? `Delete profile "${deleteTarget?.name}"? No processes are assigned to it.`
+            : `Delete profile "${deleteTarget?.name}"? ${assignedCount} process${assignedCount === 1 ? '' : 'es'} will be unassigned (moved to "All") but keep running exactly as ${assignedCount === 1 ? 'it is' : 'they are'}${runningAssignedCount > 0 ? ` — including ${runningAssignedCount} running right now` : ''}. Nothing gets stopped.`
+        }
+        confirmLabel="Delete"
+        danger
+        onConfirm={async () => {
+          if (!deleteTarget) return
+          await onDeleteProfile(deleteTarget.id)
+          setDeleteTarget(null)
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </aside>
   )
 }
