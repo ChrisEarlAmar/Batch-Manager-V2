@@ -39,6 +39,10 @@ export interface Profile {
 
 export interface AppInfo {
   isAdmin: boolean
+  currentUser: string | null
+  consoleUser: string | null
+  isDifferentUser: boolean
+  userDataPath: string
   version: string
   platform: string
 }

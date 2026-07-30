@@ -47,8 +47,20 @@ function init() {
   configFile = path.join(userDataDir, 'config.json');
   logsDir = path.join(userDataDir, 'logs');
 
-  if (!fs.existsSync(userDataDir)) fs.mkdirSync(userDataDir, { recursive: true });
-  if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
+  try {
+    if (!fs.existsSync(userDataDir)) fs.mkdirSync(userDataDir, { recursive: true });
+  } catch (err) {
+    // Nothing in this app can persist without this directory - surface
+    // clearly (caller shows this to the user) rather than limping along
+    // with state that can never actually be saved.
+    throw new Error(`Could not create or access the app data folder at "${userDataDir}": ${err.message}`);
+  }
+
+  try {
+    if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
+  } catch (err) {
+    console.error('[configManager] failed to create logs directory (logging will be degraded)', logsDir, err);
+  }
 
   if (fs.existsSync(configFile)) {
     try {

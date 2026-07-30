@@ -14,18 +14,30 @@ export function TitleBar({ appInfo }: { appInfo: AppInfo | null }) {
 
   return (
     <div className="titlebar-drag flex h-10 shrink-0 items-center gap-2.5 border-b border-border bg-card pr-2 pl-3.5">
-      <div className="flex items-center gap-2 text-[13px] font-semibold tracking-tight">
+      <div
+        className="flex items-center gap-2 text-[13px] font-semibold tracking-tight"
+        title={appInfo ? `Signed in as ${appInfo.currentUser ?? 'unknown'}\nData folder: ${appInfo.userDataPath}` : undefined}
+      >
         <img src={appIconUrl} alt="" className="size-[18px] rounded-md" />
         <span>Process Manager</span>
       </div>
 
       {appInfo?.isAdmin && (
         <div
-          className="titlebar-no-drag flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10.5px] font-semibold tracking-wide text-primary uppercase"
-          title="Running with administrator privileges"
+          className={cn(
+            'titlebar-no-drag flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold tracking-wide uppercase',
+            appInfo.isDifferentUser
+              ? 'border-status-starting/40 bg-status-starting/10 text-status-starting'
+              : 'border-primary/30 bg-primary/10 text-primary',
+          )}
+          title={
+            appInfo.isDifferentUser
+              ? `Elevated as ${appInfo.currentUser} — different from your logged-in account (${appInfo.consoleUser}). Data is stored under ${appInfo.currentUser}'s profile, not yours.`
+              : 'Running with administrator privileges'
+          }
         >
           <ShieldCheck className="size-3" />
-          Administrator
+          {appInfo.isDifferentUser ? 'Different Account' : 'Administrator'}
         </div>
       )}
 

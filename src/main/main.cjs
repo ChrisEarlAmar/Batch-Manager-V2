@@ -9,7 +9,7 @@ const configManager = require('./configManager.cjs');
 const processManager = require('./processManager.cjs');
 const logger = require('./logger.cjs');
 const ipc = require('./ipc.cjs');
-const { checkIsAdmin } = require('./adminCheck.cjs');
+const { getSessionInfo } = require('./adminCheck.cjs');
 
 // Only one instance may run at a time — a second launch just focuses the
 // existing window instead of spinning up a second app managing the same
@@ -25,6 +25,29 @@ app.on('second-instance', () => {
   if (!mainWindow.isVisible()) mainWindow.show();
   mainWindow.focus();
 });
+
+// Last-resort safety net: without these, an unguarded error anywhere (a
+// missed try/catch, an unhandled stream 'error' event, a permission hiccup
+// on some future code path) crashes the *entire* app silently — taking down
+// every process it's managing with it, with no record of why. This doesn't
+// try to recover application state, just makes sure a failure is always
+// visible somewhere and never fatal on its own for a desktop app whose whole
+// job is keeping other long-running processes alive.
+function recordFatalish(source, err) {
+  console.error(`[main] ${source}:`, err);
+  try {
+    const userDataDir = configManager.paths().userDataDir;
+    if (userDataDir) {
+      const line = `[${new Date().toISOString()}] ${source}: ${err && err.stack ? err.stack : String(err)}\n`;
+      fs.appendFileSync(path.join(userDataDir, 'crash.log'), line);
+    }
+  } catch (_) {
+    /* best-effort only - never let logging the error cause another one */
+  }
+}
+
+process.on('uncaughtException', (err) => recordFatalish('uncaughtException', err));
+process.on('unhandledRejection', (reason) => recordFatalish('unhandledRejection', reason));
 
 const isDev = !app.isPackaged;
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5327';
@@ -44,7 +67,7 @@ const WATCHDOG_SCRIPT = path.join(__dirname, 'watchdog.cjs');
 
 let mainWindow = null;
 let tray = null;
-let isAdmin = false;
+let sessionInfo = { isAdmin: false, currentUser: null, consoleUser: null, isDifferentUser: false };
 let quitting = false;
 let appIcon = null;
 
@@ -74,7 +97,11 @@ function getMainWindow() {
 
 function getAppInfo() {
   return {
-    isAdmin,
+    isAdmin: sessionInfo.isAdmin,
+    currentUser: sessionInfo.currentUser,
+    consoleUser: sessionInfo.consoleUser,
+    isDifferentUser: sessionInfo.isDifferentUser,
+    userDataPath: configManager.paths().userDataDir,
     version: app.getVersion(),
     platform: process.platform,
   };
@@ -117,6 +144,22 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+  });
+
+  // UAC elevation reusing the *same* account never changes where config/logs
+  // live - app.getPath('userData') resolves identically either way. The one
+  // case where it genuinely does point elsewhere is UAC prompting for a
+  // *different* administrator account's credentials, which is a real
+  // Windows account switch, not an app bug. Surfacing it once, clearly,
+  // beats leaving it to look like data mysteriously moved.
+  mainWindow.webContents.once('did-finish-load', () => {
+    if (!sessionInfo.isDifferentUser) return;
+    mainWindow.webContents.send('app:toast', {
+      kind: 'warning',
+      title: 'Running as a different Windows account',
+      body: `Elevated as ${sessionInfo.currentUser} instead of ${sessionInfo.consoleUser} — data is stored under ${sessionInfo.currentUser}'s profile, not yours.`,
+      at: Date.now(),
+    });
   });
 
   mainWindow.on('close', (event) => {
@@ -227,38 +270,51 @@ function spawnWatchdog(pidFilePath) {
 }
 
 app.whenReady().then(async () => {
-  if (process.platform === 'win32') {
-    app.setAppUserModelId('com.citihardware.processmanager');
+  try {
+    if (process.platform === 'win32') {
+      app.setAppUserModelId('com.citihardware.processmanager');
+    }
+
+    // We rely entirely on the custom titlebar for window controls and never
+    // show a native menu bar, so the default one (with its own Ctrl+R/F12/etc
+    // accelerators) would only be a way to bypass the shortcut lockdown below.
+    Menu.setApplicationMenu(null);
+
+    sessionInfo = getSessionInfo();
+    appIcon = loadAppIcon();
+
+    configManager.init();
+    const pidFilePath = path.join(configManager.paths().userDataDir, 'running-pids.json');
+    processManager.init({
+      windowsProvider: () => BrowserWindow.getAllWindows(),
+      appIconPath: ICON_PNG,
+      pidFile: pidFilePath,
+    });
+    spawnWatchdog(pidFilePath);
+
+    ipc.register({ getMainWindow, getAppInfo });
+
+    createWindow();
+    createTray();
+
+    processManager.autoStartConfigured();
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+      else mainWindow.show();
+    });
+  } catch (err) {
+    // Startup failures (most plausibly: can't create/access the userData
+    // folder at all) can't be fixed by soldiering on - there'd be nothing
+    // for the rest of the app to do. Make sure this is never a silent
+    // disappearance before quitting.
+    recordFatalish('startup', err);
+    dialog.showErrorBox(
+      'Process Manager failed to start',
+      `${err.message}\n\nCheck that the app has permission to read/write its data folder, then try again.`,
+    );
+    app.exit(1);
   }
-
-  // We rely entirely on the custom titlebar for window controls and never
-  // show a native menu bar, so the default one (with its own Ctrl+R/F12/etc
-  // accelerators) would only be a way to bypass the shortcut lockdown below.
-  Menu.setApplicationMenu(null);
-
-  isAdmin = checkIsAdmin();
-  appIcon = loadAppIcon();
-
-  configManager.init();
-  const pidFilePath = path.join(configManager.paths().userDataDir, 'running-pids.json');
-  processManager.init({
-    windowsProvider: () => BrowserWindow.getAllWindows(),
-    appIconPath: ICON_PNG,
-    pidFile: pidFilePath,
-  });
-  spawnWatchdog(pidFilePath);
-
-  ipc.register({ getMainWindow, getAppInfo });
-
-  createWindow();
-  createTray();
-
-  processManager.autoStartConfigured();
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-    else mainWindow.show();
-  });
 });
 
 app.on('window-all-closed', () => {
