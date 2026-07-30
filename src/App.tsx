@@ -102,14 +102,19 @@ function App() {
     setPendingScript(null)
   }
 
+  // dragenter/dragover must call preventDefault() unconditionally: per the
+  // HTML5 DnD spec, if dragover's default isn't prevented, the browser never
+  // permits a drop to fire at all (cursor shows "not allowed", releasing the
+  // mouse does nothing) - so this can't be gated on inspecting
+  // dataTransfer.types first without risking silently breaking the drop
+  // entirely. File-type validation happens at the drop itself instead, where
+  // dataTransfer.files is reliably populated.
   function handleDragEnter(e: React.DragEvent) {
-    if (!e.dataTransfer.types.includes('Files')) return
     e.preventDefault()
     setDragDepth((d) => d + 1)
   }
 
   function handleDragOver(e: React.DragEvent) {
-    if (!e.dataTransfer.types.includes('Files')) return
     e.preventDefault()
     e.dataTransfer.dropEffect = 'copy'
   }
@@ -128,7 +133,18 @@ function App() {
       pushToast({ kind: 'warning', title: 'Unsupported file', body: 'Drop a .bat or .cmd file to add it as a process.', at: Date.now() })
       return
     }
-    const filePath = window.api.getPathForFile(file)
+    let filePath: string
+    try {
+      filePath = window.api.getPathForFile(file)
+    } catch (err) {
+      pushToast({
+        kind: 'error',
+        title: 'Could not read dropped file',
+        body: err instanceof Error ? err.message : 'Something went wrong resolving the file path.',
+        at: Date.now(),
+      })
+      return
+    }
     openAddProcess(filePath)
   }
 
