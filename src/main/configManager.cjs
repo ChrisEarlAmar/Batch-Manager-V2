@@ -30,6 +30,10 @@ function defaultConfig() {
       minimizeToTray: false,
       startMinimized: false,
       launchOnStartup: false,
+      // Remembered across the file/folder pickers so each one reopens where
+      // the user last left off, instead of wherever the OS feels like
+      // defaulting to. Not exposed in any UI - purely a picker default.
+      lastBrowsedDirectory: null,
     },
   };
 }

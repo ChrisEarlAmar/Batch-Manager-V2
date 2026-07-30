@@ -3,6 +3,7 @@
 'use strict';
 
 const fs = require('fs');
+const path = require('path');
 const { ipcMain, dialog, shell } = require('electron');
 const configManager = require('./configManager.cjs');
 const processManager = require('./processManager.cjs');
@@ -95,10 +96,45 @@ function register({ getMainWindow, getAppInfo }) {
     return true;
   });
 
+  // A remembered/suggested folder can stop resolving for reasons outside our
+  // control - deleted, renamed, or (notably) a OneDrive-redirected folder
+  // that an elevated session's filesystem view can't see even though the
+  // non-elevated session that originally browsed there could. Handing
+  // Explorer a defaultPath it can't resolve doesn't just fall back quietly;
+  // it can land the dialog in a broken-looking "No items match your search"
+  // state. Walking up to the nearest ancestor that does exist keeps the
+  // starting point close and always valid.
+  function nearestExistingDir(dir) {
+    let current = dir;
+    while (current) {
+      if (fs.existsSync(current)) return current;
+      const parent = path.dirname(current);
+      if (parent === current) return null;
+      current = parent;
+    }
+    return null;
+  }
+
+  function safeDefaultPath(candidate) {
+    if (!candidate) return undefined;
+    return nearestExistingDir(candidate) || undefined;
+  }
+
+  function getLastBrowsedDirectory() {
+    return safeDefaultPath(configManager.getState().settings.lastBrowsedDirectory);
+  }
+
+  function setLastBrowsedDirectory(dir) {
+    const state = configManager.getState();
+    state.settings.lastBrowsedDirectory = dir;
+    configManager.save();
+  }
+
   ipcMain.handle('dialog:pick-batch-file', async () => {
     const win = getMainWindow();
     const result = await dialog.showOpenDialog(win, {
       title: 'Select a batch file',
+      defaultPath: getLastBrowsedDirectory(),
       properties: ['openFile'],
       filters: [
         { name: 'Batch / Command scripts', extensions: ['bat', 'cmd'] },
@@ -106,6 +142,7 @@ function register({ getMainWindow, getAppInfo }) {
       ],
     });
     if (result.canceled || !result.filePaths.length) return null;
+    setLastBrowsedDirectory(path.dirname(result.filePaths[0]));
     return result.filePaths[0];
   });
 
@@ -113,10 +150,11 @@ function register({ getMainWindow, getAppInfo }) {
     const win = getMainWindow();
     const result = await dialog.showOpenDialog(win, {
       title: 'Select working directory',
-      defaultPath: defaultPath || undefined,
+      defaultPath: safeDefaultPath(defaultPath) || getLastBrowsedDirectory(),
       properties: ['openDirectory'],
     });
     if (result.canceled || !result.filePaths.length) return null;
+    setLastBrowsedDirectory(result.filePaths[0]);
     return result.filePaths[0];
   });
 
