@@ -3,6 +3,7 @@
 // without losing history, and tearing sessions down (graceful, then forced).
 'use strict';
 
+const fs = require('fs');
 const path = require('path');
 const pty = require('node-pty');
 const { execFile } = require('child_process');
@@ -31,6 +32,19 @@ function spawn(id, { script, workingDirectory }, { onData, onExit }) {
   const cwd = workingDirectory && workingDirectory.trim() ? workingDirectory : path.dirname(script);
   const cols = 100;
   const rows = 30;
+
+  // Fail with a specific, actionable message instead of letting cmd.exe spawn
+  // anyway and exit with an opaque "file not found" a moment later — which
+  // otherwise just surfaces as a generic crash. A file that existed when it
+  // was configured can still go missing later (moved, deleted, a OneDrive/
+  // cloud-sync placeholder that didn't rehydrate, a drive letter not mapped
+  // in an elevated session, etc).
+  if (!fs.existsSync(script)) {
+    throw new Error(`Batch file not found: ${script}`);
+  }
+  if (!fs.existsSync(cwd)) {
+    throw new Error(`Working directory not found: ${cwd}`);
+  }
 
   const ptyProcess = pty.spawn('cmd.exe', ['/d', '/c', script], {
     name: 'xterm-256color',
