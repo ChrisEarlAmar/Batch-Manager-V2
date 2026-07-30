@@ -1,4 +1,4 @@
-import { X } from 'lucide-react'
+import { ShieldAlert, X } from 'lucide-react'
 import type { ProcessItem, ProcessStatus } from '../types'
 import { cn } from '@/lib/utils'
 
@@ -40,6 +40,11 @@ export function TerminalTabs({
           >
             <span className={cn('size-1.5 shrink-0 rounded-full', DOT_COLOR[proc.status])} />
             <span className="truncate">{proc.name}</span>
+            {proc.runElevated && (
+              <span title="Runs elevated (UAC)" className="shrink-0">
+                <ShieldAlert className="size-3 text-status-starting" />
+              </span>
+            )}
             <span
               onClick={(e) => {
                 e.stopPropagation()

@@ -7,7 +7,6 @@ const path = require('path');
 const { ipcMain, dialog, shell } = require('electron');
 const configManager = require('./configManager.cjs');
 const processManager = require('./processManager.cjs');
-const terminalManager = require('./terminalManager.cjs');
 const logger = require('./logger.cjs');
 
 function register({ getMainWindow, getAppInfo }) {
@@ -33,8 +32,12 @@ function register({ getMainWindow, getAppInfo }) {
     return true;
   });
 
-  ipcMain.handle('processes:start', (_e, id) => {
-    processManager.start(id);
+  ipcMain.handle('processes:start', async (_e, id) => {
+    // start() never rejects (it catches its own spawn errors and reports
+    // them via a toast), so this always settles - awaiting it just means an
+    // elevated start's Promise doesn't resolve until the UAC prompt is
+    // actually answered one way or another, instead of immediately.
+    await processManager.start(id);
     return true;
   });
 
@@ -66,11 +69,11 @@ function register({ getMainWindow, getAppInfo }) {
     return true;
   });
 
-  ipcMain.handle('terminal:get-scrollback', (_e, id) => terminalManager.getScrollback(id));
+  ipcMain.handle('terminal:get-scrollback', (_e, id) => processManager.getTerminalScrollback(id));
 
-  ipcMain.on('terminal:write', (_e, id, data) => terminalManager.write(id, data));
+  ipcMain.on('terminal:write', (_e, id, data) => processManager.writeTerminal(id, data));
 
-  ipcMain.on('terminal:resize', (_e, id, cols, rows) => terminalManager.resize(id, cols, rows));
+  ipcMain.on('terminal:resize', (_e, id, cols, rows) => processManager.resizeTerminal(id, cols, rows));
 
   ipcMain.handle('terminal:open-log', async (event, id) => {
     const logPath = logger.getLogPath(id);

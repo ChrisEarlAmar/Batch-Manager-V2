@@ -9,6 +9,7 @@ export interface ProcessItem {
   restartOnCrash: boolean
   profileId: string | null
   color: string | null
+  runElevated: boolean
   createdAt: number
 
   status: ProcessStatus
@@ -29,6 +30,7 @@ export interface ProcessDraft {
   restartOnCrash: boolean
   profileId: string | null
   color: string | null
+  runElevated: boolean
 }
 
 export interface Profile {

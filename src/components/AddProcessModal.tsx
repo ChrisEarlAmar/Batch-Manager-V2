@@ -23,6 +23,7 @@ const EMPTY_DRAFT: ProcessDraft = {
   restartOnCrash: true,
   profileId: null,
   color: ACCENT_PALETTE[0],
+  runElevated: false,
 }
 
 export function AddProcessModal({
@@ -50,6 +51,7 @@ export function AddProcessModal({
         restartOnCrash: editing.restartOnCrash,
         profileId: editing.profileId,
         color: editing.color ?? ACCENT_PALETTE[0],
+        runElevated: editing.runElevated,
       }
     }
     if (initialScript) {
@@ -195,6 +197,14 @@ export function AddProcessModal({
               })}
             </div>
           </div>
+
+          {/* No "run elevated" checkbox here on purpose: launching the whole
+              app itself as administrator already elevates every process it
+              spawns via plain token inheritance, with no per-launch UAC
+              prompt. The per-process elevation path (runElevated field,
+              elevatedRunner.cjs/elevatedTerminalManager.cjs, the routing in
+              processManager.cjs) is intentionally left in place but unused
+              rather than removed - see conversation history if reviving it. */}
 
           <label className="flex items-center gap-2 text-[12.5px]">
             <Checkbox checked={draft.autoStart} onCheckedChange={(v) => set('autoStart', v === true)} />

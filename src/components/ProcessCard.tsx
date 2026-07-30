@@ -1,4 +1,4 @@
-import { Play, Square, RotateCcw, Terminal, Trash2, Pencil } from 'lucide-react'
+import { Play, Square, RotateCcw, Terminal, Trash2, Pencil, ShieldAlert } from 'lucide-react'
 import type { ProcessItem, ProcessStatus } from '../types'
 import { formatTotalRuntime, useUptime } from '../hooks/useUptime'
 import { Card } from '@/components/ui/card'
@@ -76,8 +76,18 @@ export function ProcessCard({
         <span title="Total accumulated runtime">Total {formatTotalRuntime(proc.totalRuntimeMs)}</span>
       </div>
 
-      {(proc.autoStart || proc.restartOnCrash || proc.autoRestartSuppressed || proc.crashCount > 0) && (
+      {(proc.autoStart || proc.restartOnCrash || proc.runElevated || proc.autoRestartSuppressed || proc.crashCount > 0) && (
         <div className="mt-2 flex flex-wrap gap-1 px-4">
+          {proc.runElevated && (
+            <Badge
+              variant="outline"
+              className="border-status-starting/40 bg-status-starting/10 text-status-starting normal-case"
+              title="Prompts for UAC every time this process starts"
+            >
+              <ShieldAlert className="size-3" />
+              Elevated
+            </Badge>
+          )}
           {proc.autoStart && (
             <Badge variant="outline" className="text-primary border-primary/30 bg-primary/10 normal-case">
               Auto-start

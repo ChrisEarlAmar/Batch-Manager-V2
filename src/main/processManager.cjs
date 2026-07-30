@@ -9,6 +9,7 @@ const { randomUUID } = require('crypto');
 const { Notification } = require('electron');
 const configManager = require('./configManager.cjs');
 const terminalManager = require('./terminalManager.cjs');
+const elevatedTerminalManager = require('./elevatedTerminalManager.cjs');
 const logger = require('./logger.cjs');
 
 const CRASH_WINDOW_MS = 60 * 1000;
@@ -32,6 +33,13 @@ function defaultRuntime() {
     restartTimer: null,
     crashTimestamps: [],
     autoRestartSuppressed: false,
+    // Which manager actually owns the live session, captured at the moment
+    // it was started. Deliberately NOT re-derived from the process's current
+    // `runElevated` config on every call: if the user flips that setting
+    // while the process is still running from before the change, stop/write/
+    // resize must keep targeting whichever manager actually has the session,
+    // not whichever the (now different) config says to use.
+    usingElevated: false,
   };
 }
 
@@ -42,6 +50,10 @@ function ensureRuntime(id) {
     runtime.set(id, rt);
   }
   return rt;
+}
+
+function pickManager(rt) {
+  return rt && rt.usingElevated ? elevatedTerminalManager : terminalManager;
 }
 
 function ensureStats(id) {
@@ -144,6 +156,7 @@ function add(partial) {
     restartOnCrash: !!partial.restartOnCrash,
     profileId: partial.profileId || null,
     color: partial.color || null,
+    runElevated: !!partial.runElevated,
     createdAt: Date.now(),
   };
 
@@ -155,7 +168,7 @@ function add(partial) {
   return toItem(proc);
 }
 
-const EDITABLE_FIELDS = ['name', 'script', 'workingDirectory', 'autoStart', 'restartOnCrash', 'profileId', 'color'];
+const EDITABLE_FIELDS = ['name', 'script', 'workingDirectory', 'autoStart', 'restartOnCrash', 'profileId', 'color', 'runElevated'];
 
 function update(id, patch) {
   const proc = findConfig(id);
@@ -181,7 +194,7 @@ async function remove(id) {
   }
   rt.restartPending = false; // don't let an in-flight restart resurrect this
 
-  if (terminalManager.isAlive(id)) {
+  if (pickManager(rt).isAlive(id)) {
     await new Promise((resolve) => {
       pendingRemovals.set(id, resolve);
       stop(id);
@@ -206,20 +219,25 @@ async function remove(id) {
   broadcastList();
 }
 
-function start(id) {
+async function start(id) {
   const proc = findConfig(id);
   if (!proc) return;
   const rt = ensureRuntime(id);
-  if (rt.status === 'running' || rt.status === 'starting' || terminalManager.isAlive(id)) return;
+  if (rt.status === 'running' || rt.status === 'starting' || terminalManager.isAlive(id) || elevatedTerminalManager.isAlive(id)) return;
 
   rt.stopRequested = false;
   rt.autoRestartSuppressed = false;
   rt.crashTimestamps = [];
+  // Captured now, not read fresh on every later call - see the comment on
+  // defaultRuntime()'s usingElevated field for why.
+  rt.usingElevated = !!proc.runElevated;
   rt.status = 'starting';
   broadcastList();
 
+  const manager = pickManager(rt);
+
   try {
-    const pid = terminalManager.spawn(
+    const pid = await manager.spawn(
       id,
       { script: proc.script, workingDirectory: proc.workingDirectory },
       {
@@ -230,6 +248,21 @@ function start(id) {
         onExit: (exitCode, signal) => handleExit(id, exitCode, signal),
       },
     );
+
+    // Elevated spawns can sit waiting on a UAC prompt for a while; a stop
+    // requested during that wait can't reach anything yet (there's no live
+    // session to signal until the runner connects), so it's silently
+    // stranded until we check for it here, right as the session becomes
+    // real. Tear it straight back down instead of leaving an unwanted
+    // process running just because the prompt was eventually accepted.
+    if (rt.stopRequested) {
+      rt.pid = pid;
+      rt.status = 'stopping';
+      broadcastList();
+      manager.stop(id);
+      return;
+    }
+
     rt.pid = pid;
     rt.status = 'running';
     rt.startedAt = Date.now();
@@ -251,7 +284,8 @@ function stop(id) {
     clearTimeout(rt.restartTimer);
     rt.restartTimer = null;
   }
-  if (!terminalManager.isAlive(id)) {
+  const manager = pickManager(rt);
+  if (!manager.isAlive(id)) {
     if (rt.status !== 'stopped') {
       rt.status = 'stopped';
       broadcastList();
@@ -262,12 +296,24 @@ function stop(id) {
   rt.status = 'stopping';
   broadcastList();
   logger.markEvent(id, 'stop requested');
-  terminalManager.stop(id);
+  manager.stop(id, () => {
+    // Only elevatedTerminalManager ever actually calls this back - a normal
+    // session's own force-kill fallback means it always resolves within a
+    // few seconds on its own. An elevated process tree can't be force-killed
+    // from this (non-elevated) side, so if the runner hasn't confirmed by
+    // now there's nothing left to do but tell the user to go look.
+    const proc = findConfig(id);
+    broadcastToast(
+      'warning',
+      proc ? proc.name : id,
+      'Still waiting for the elevated process to confirm it stopped — check Task Manager if this persists.',
+    );
+  });
 }
 
 function restart(id) {
   const rt = ensureRuntime(id);
-  if (terminalManager.isAlive(id)) {
+  if (pickManager(rt).isAlive(id)) {
     rt.restartPending = true;
     stop(id);
   } else {
@@ -368,7 +414,24 @@ function shutdownAll() {
     const rt = runtime.get(id);
     if (rt.restartTimer) clearTimeout(rt.restartTimer);
   }
-  return terminalManager.disposeAll();
+  return Promise.all([terminalManager.disposeAll(), elevatedTerminalManager.disposeAll()]);
+}
+
+// --- Terminal I/O passthroughs -------------------------------------------
+// ipc.cjs routes terminal:write/resize/get-scrollback through these instead
+// of calling either terminal manager directly, since only this module tracks
+// which one actually owns a given session's runtime state.
+
+function writeTerminal(id, data) {
+  pickManager(runtime.get(id)).write(id, data);
+}
+
+function resizeTerminal(id, cols, rows) {
+  pickManager(runtime.get(id)).resize(id, cols, rows);
+}
+
+function getTerminalScrollback(id) {
+  return pickManager(runtime.get(id)).getScrollback(id);
 }
 
 // --- Profiles -----------------------------------------------------------
@@ -415,6 +478,9 @@ module.exports = {
   stopAll,
   autoStartConfigured,
   shutdownAll,
+  writeTerminal,
+  resizeTerminal,
+  getTerminalScrollback,
   listProfiles,
   addProfile,
   updateProfile,
